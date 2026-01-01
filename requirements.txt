@@ -17,6 +17,7 @@ python-dotenv==1.0.0
 
 # Database dependencies
 # For SQLite (built-in, no extra install needed)
+cachetools
 
 # For MySQL (optional - only if using MySQL)
 mysql-connector-python==8.2.0
