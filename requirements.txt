@@ -1,0 +1,24 @@
+python-telegram-bot
+aiohttp
+web3
+solders
+solana
+python-dotenv
+# Optional: For advanced features
+pandas
+numpy
+requests
+# Existing dependencies
+python-telegram-bot==21.10aiohttp==3.9.1
+web3==6.15.1
+requests==2.31.0
+python-dotenv==1.0.0
+
+# Database dependencies
+# For SQLite (built-in, no extra install needed)
+
+# For MySQL (optional - only if using MySQL)
+mysql-connector-python==8.2.0
+
+# Database - PostgreSQL for Render
+psycopg2-binary==2.9.9

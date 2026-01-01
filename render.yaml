@@ -1,0 +1,21 @@
+services:
+  # Web service (your bot)
+  - type: web
+    name: coinwinrbot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.7
+      - key: DATABASE_TYPE
+        value: postgresql
+    autoDeploy: true
+    
+databases:
+  # PostgreSQL database
+  - name: coinwinrbot-db
+    plan: free
+    databaseName: coinwinrbot
+    user: coinwinrbot
