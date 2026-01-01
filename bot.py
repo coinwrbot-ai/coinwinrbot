@@ -5915,7 +5915,7 @@ async def periodic_cleanup():
 def ensure_admin_tables():
     """
     ✅ ENHANCED: Automatically creates missing tables
-    Works for both SQLite and MySQL
+    Works for both SQLite, MySQL, and PostgreSQL
     """
     try:
         conn = db.get_connection()
@@ -5930,7 +5930,15 @@ def ensure_admin_tables():
         # STEP 1: Check and add created_at column to users table
         # ═══════════════════════════════════════════════════════════
         
-        if db_type == 'mysql':
+        if db_type == 'postgresql':
+            # PostgreSQL version
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users'
+            """)
+            columns = [row[0] for row in cursor.fetchall()]
+        elif db_type == 'mysql':
             cursor.execute("""
                 SELECT COLUMN_NAME 
                 FROM INFORMATION_SCHEMA.COLUMNS 
@@ -5938,14 +5946,24 @@ def ensure_admin_tables():
                 AND TABLE_NAME = 'users'
             """)
             columns = [row[0] for row in cursor.fetchall()]
-        else:
+        else:  # sqlite
             cursor.execute("PRAGMA table_info(users)")
             columns = [column[1] for column in cursor.fetchall()]
         
         if 'created_at' not in columns:
             logger.info("➕ Adding created_at column to users table...")
             
-            if db_type == 'mysql':
+            if db_type == 'postgresql':
+                cursor.execute("""
+                    ALTER TABLE users 
+                    ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                """)
+                cursor.execute("""
+                    UPDATE users 
+                    SET created_at = CURRENT_TIMESTAMP 
+                    WHERE created_at IS NULL
+                """)
+            elif db_type == 'mysql':
                 cursor.execute("""
                     ALTER TABLE users 
                     ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -5955,7 +5973,7 @@ def ensure_admin_tables():
                     SET created_at = NOW() 
                     WHERE created_at IS NULL
                 """)
-            else:
+            else:  # sqlite
                 cursor.execute("ALTER TABLE users ADD COLUMN created_at TEXT")
                 cursor.execute("""
                     UPDATE users 
@@ -5970,14 +5988,21 @@ def ensure_admin_tables():
         # STEP 2: Get list of existing tables
         # ═══════════════════════════════════════════════════════════
         
-        if db_type == 'mysql':
+        if db_type == 'postgresql':
+            cursor.execute("""
+                SELECT tablename 
+                FROM pg_tables 
+                WHERE schemaname = 'public'
+            """)
+            existing_tables = [row[0] for row in cursor.fetchall()]
+        elif db_type == 'mysql':
             cursor.execute("""
                 SELECT TABLE_NAME 
                 FROM INFORMATION_SCHEMA.TABLES 
                 WHERE TABLE_SCHEMA = DATABASE()
             """)
             existing_tables = [row[0] for row in cursor.fetchall()]
-        else:
+        else:  # sqlite
             cursor.execute("""
                 SELECT name FROM sqlite_master 
                 WHERE type='table'
@@ -5993,7 +6018,27 @@ def ensure_admin_tables():
         if 'admin_logs' not in existing_tables:
             logger.info("🔨 Creating admin_logs table...")
             
-            if db_type == 'mysql':
+            if db_type == 'postgresql':
+                cursor.execute("""
+                    CREATE TABLE admin_logs (
+                        id SERIAL PRIMARY KEY,
+                        admin_id BIGINT NOT NULL,
+                        action_type VARCHAR(50) NOT NULL,
+                        target_user_id BIGINT,
+                        details TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX idx_admin_logs_admin_id 
+                    ON admin_logs(admin_id)
+                """)
+                cursor.execute("""
+                    CREATE INDEX idx_admin_logs_created_at 
+                    ON admin_logs(created_at)
+                """)
+            elif db_type == 'mysql':
                 cursor.execute("""
                     CREATE TABLE admin_logs (
                         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -6007,7 +6052,7 @@ def ensure_admin_tables():
                         INDEX idx_action_type (action_type)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """)
-            else:
+            else:  # sqlite
                 cursor.execute("""
                     CREATE TABLE admin_logs (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6032,13 +6077,35 @@ def ensure_admin_tables():
             logger.info("✅ admin_logs table created")
         
         # ═══════════════════════════════════════════════════════════
-        # STEP 4: Create broadcasts table if missing (optional but useful)
+        # STEP 4: Create broadcasts table if missing
         # ═══════════════════════════════════════════════════════════
         
         if 'broadcasts' not in existing_tables:
             logger.info("🔨 Creating broadcasts table...")
             
-            if db_type == 'mysql':
+            if db_type == 'postgresql':
+                cursor.execute("""
+                    CREATE TABLE broadcasts (
+                        id SERIAL PRIMARY KEY,
+                        message TEXT NOT NULL,
+                        admin_id BIGINT NOT NULL,
+                        tier VARCHAR(50),
+                        total_users INT DEFAULT 0,
+                        successful INT DEFAULT 0,
+                        failed INT DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE INDEX idx_broadcasts_admin_id 
+                    ON broadcasts(admin_id)
+                """)
+                cursor.execute("""
+                    CREATE INDEX idx_broadcasts_created_at 
+                    ON broadcasts(created_at)
+                """)
+            elif db_type == 'mysql':
                 cursor.execute("""
                     CREATE TABLE broadcasts (
                         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -6053,7 +6120,7 @@ def ensure_admin_tables():
                         INDEX idx_created_at (created_at)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """)
-            else:
+            else:  # sqlite
                 cursor.execute("""
                     CREATE TABLE broadcasts (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6082,14 +6149,21 @@ def ensure_admin_tables():
         ]
         
         # Re-check tables
-        if db_type == 'mysql':
+        if db_type == 'postgresql':
+            cursor.execute("""
+                SELECT tablename 
+                FROM pg_tables 
+                WHERE schemaname = 'public'
+            """)
+            final_tables = [row[0] for row in cursor.fetchall()]
+        elif db_type == 'mysql':
             cursor.execute("""
                 SELECT TABLE_NAME 
                 FROM INFORMATION_SCHEMA.TABLES 
                 WHERE TABLE_SCHEMA = DATABASE()
             """)
             final_tables = [row[0] for row in cursor.fetchall()]
-        else:
+        else:  # sqlite
             cursor.execute("""
                 SELECT name FROM sqlite_master 
                 WHERE type='table'
@@ -6101,7 +6175,7 @@ def ensure_admin_tables():
         if missing:
             logger.error(f"❌ Still missing tables: {missing}")
             logger.error("   These tables should be created by your database initialization")
-            logger.error("   Check your database.py or database_mysql.py")
+            logger.error(f"   Check your database_{db_type}.py")
         else:
             logger.info(f"✅ All required tables exist: {required_tables}")
         
@@ -6112,7 +6186,11 @@ def ensure_admin_tables():
         if conn:
             conn.rollback()
         raise
-
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            db.return_connection(conn)
 
 # ═══════════════════════════════════════════════════════════════════
 # BONUS: Function to check if database needs migration
