@@ -939,95 +939,91 @@ class PostgreSQLDatabase:
             conn.close()
     
     def get_active_users_7d(self) -> int:
-        """Get users active in last 7 days - MISSING METHOD"""
+        """Get users active in last 7 days"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         try:
+            # PostgreSQL syntax: CURRENT_TIMESTAMP - INTERVAL '7 days'
             cursor.execute("""
                 SELECT COUNT(DISTINCT user_id) 
                 FROM analysis_logs 
-                WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
             """)
             result = cursor.fetchone()
             return result[0] if result else 0
-        except Error as e:
+        except Exception as e:
             logger.error(f"Get active users error: {e}")
             return 0
         finally:
             cursor.close()
-            conn.close()
-    
+            self.return_connection(conn)
+
     def get_active_users(self, days: int) -> int:
-        """Get users active in last N days - MISSING METHOD"""
+        """Get users active in last N days"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         try:
+            # PostgreSQL syntax with parameter
             cursor.execute("""
                 SELECT COUNT(DISTINCT user_id) 
                 FROM analysis_logs 
-                WHERE created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
+                WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '%s days'
             """, (days,))
             result = cursor.fetchone()
             return result[0] if result else 0
-        except Error as e:
+        except Exception as e:
             logger.error(f"Get active users error: {e}")
             return 0
         finally:
             cursor.close()
-            conn.close()
-    
+            self.return_connection(conn)
+
     def get_analyses_today(self) -> int:
-        """Get analyses today - MISSING METHOD"""
+        """Get analyses today"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         try:
+            # PostgreSQL syntax: CURRENT_DATE
             cursor.execute("""
                 SELECT COUNT(*) 
                 FROM analysis_logs 
-                WHERE DATE(created_at) = CURDATE()
+                WHERE DATE(created_at) = CURRENT_DATE
             """)
             result = cursor.fetchone()
             return result[0] if result else 0
-        except Error as e:
+        except Exception as e:
             logger.error(f"Get analyses today error: {e}")
             return 0
         finally:
             cursor.close()
-            conn.close()
-    
-    def get_today_analyses(self) -> int:
-        """Alias for get_analyses_today"""
-        return self.get_analyses_today()
-    
+            self.return_connection(conn)
+
     def get_new_users_today(self) -> int:
-        """Get new users today - MISSING METHOD"""
+        """Get new users today"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         try:
+            # PostgreSQL syntax: CURRENT_DATE
             cursor.execute("""
                 SELECT COUNT(*) 
                 FROM users 
-                WHERE DATE(created_at) = CURDATE()
+                WHERE DATE(created_at) = CURRENT_DATE
             """)
             result = cursor.fetchone()
             return result[0] if result else 0
-        except Error as e:
+        except Exception as e:
             logger.error(f"Get new users today error: {e}")
             return 0
         finally:
             cursor.close()
-            conn.close()
-    
-    def get_today_registrations(self) -> int:
-        """Alias for get_new_users_today"""
-        return self.get_new_users_today()
-    
+            self.return_connection(conn)
+
     def get_users_by_tier(self) -> Dict:
-        """Get users by subscription tier - MISSING METHOD"""
+        """Get users by subscription tier"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -1055,7 +1051,7 @@ class PostgreSQLDatabase:
                     tier_counts[tier] = count
             
             return tier_counts
-        except Error as e:
+        except Exception as e:
             logger.error(f"Get users by tier error: {e}")
             return {
                 'free': 0,
@@ -1066,10 +1062,10 @@ class PostgreSQLDatabase:
             }
         finally:
             cursor.close()
-            conn.close()
-    
+            self.return_connection(conn)
+
     def get_revenue_stats(self) -> Dict:
-        """Get revenue statistics - MISSING METHOD"""
+        """Get revenue statistics"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -1079,7 +1075,7 @@ class PostgreSQLDatabase:
                 SELECT subscription_tier, COUNT(*) as count
                 FROM users
                 WHERE subscription_tier != 'free' 
-                AND (subscription_expires_at IS NULL OR subscription_expires_at > NOW())
+                AND (subscription_expires_at IS NULL OR subscription_expires_at > CURRENT_TIMESTAMP)
                 GROUP BY subscription_tier
             """)
             
@@ -1106,13 +1102,13 @@ class PostgreSQLDatabase:
                         monthly_revenue = price * count
                     mrr += monthly_revenue
             
-            # This month's revenue
+            # This month's revenue - PostgreSQL syntax
             cursor.execute("""
                 SELECT COALESCE(SUM(amount), 0)
                 FROM payment_verifications 
                 WHERE status = 'approved' 
-                AND YEAR(verified_at) = YEAR(NOW())
-                AND MONTH(verified_at) = MONTH(NOW())
+                AND EXTRACT(YEAR FROM verified_at) = EXTRACT(YEAR FROM CURRENT_TIMESTAMP)
+                AND EXTRACT(MONTH FROM verified_at) = EXTRACT(MONTH FROM CURRENT_TIMESTAMP)
             """)
             month_revenue = cursor.fetchone()[0]
             
@@ -1132,7 +1128,7 @@ class PostgreSQLDatabase:
                 'total_revenue': float(total_revenue),
                 'active_subscriptions': total_active
             }
-        except Error as e:
+        except Exception as e:
             logger.error(f"Get revenue stats error: {e}")
             return {
                 'mrr': 0.0,
@@ -1144,19 +1140,7 @@ class PostgreSQLDatabase:
             }
         finally:
             cursor.close()
-            conn.close()
-    
-    def get_admin_dashboard_stats(self) -> Dict:
-        """Get all stats for admin dashboard - MISSING METHOD"""
-        return {
-            'total_users': self.get_total_users(),
-            'active_7d': self.get_active_users_7d(),
-            'analyses_today': self.get_analyses_today(),
-            'new_users_today': self.get_new_users_today(),
-            'users_by_tier': self.get_users_by_tier(),
-            'active_subs': self.get_revenue_stats()['active_subscriptions'],
-            'revenue': self.get_revenue_stats()
-        }
+            self.return_connection(conn)
     
     def get_admin_stats(self) -> Dict:
         """Get comprehensive admin statistics"""
@@ -1168,19 +1152,19 @@ class PostgreSQLDatabase:
             cursor.execute("SELECT COUNT(*) FROM users")
             total_users = cursor.fetchone()[0]
             
-            # Paid users
+            # Paid users - PostgreSQL syntax
             cursor.execute("""
                 SELECT COUNT(*) FROM users 
                 WHERE subscription_tier != 'free' 
-                AND (subscription_expires_at IS NULL OR subscription_expires_at > NOW())
+                AND (subscription_expires_at IS NULL OR subscription_expires_at > CURRENT_TIMESTAMP)
             """)
             paid_users = cursor.fetchone()[0]
             
-            # Active today
+            # Active today - PostgreSQL syntax
             cursor.execute("""
                 SELECT COUNT(DISTINCT user_id) 
                 FROM analysis_logs 
-                WHERE DATE(created_at) = CURDATE()
+                WHERE DATE(created_at) = CURRENT_DATE
             """)
             active_today = cursor.fetchone()[0]
             
@@ -1199,7 +1183,7 @@ class PostgreSQLDatabase:
                 'total_analyses': 0
             }
             
-        except Error as e:
+        except Exception as e:
             logger.error(f"Get admin stats error: {e}")
             return {
                 'total_users': 0,
@@ -1215,7 +1199,70 @@ class PostgreSQLDatabase:
             }
         finally:
             cursor.close()
-            conn.close()
+            self.return_connection(conn)
+
+    def get_user_stats(self, user_id: int) -> Dict:
+        """Get user statistics"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Total analyses
+            cursor.execute("""
+                SELECT COUNT(*) FROM analysis_logs WHERE user_id = %s
+            """, (user_id,))
+            total_analyses = cursor.fetchone()[0]
+            
+            # Daily analyses
+            cursor.execute("""
+                SELECT daily_analyses FROM users WHERE user_id = %s
+            """, (user_id,))
+            result = cursor.fetchone()
+            daily_analyses = result[0] if result else 0
+            
+            # Tracked wallets
+            cursor.execute("""
+                SELECT COUNT(*) FROM tracked_wallets
+                WHERE user_id = %s AND is_active = TRUE
+            """, (user_id,))
+            wallets_tracked = cursor.fetchone()[0]
+            
+            return {
+                'total_analyses': total_analyses,
+                'daily_analyses': daily_analyses,
+                'wallets_tracked': wallets_tracked,
+                'successful_analyses': total_analyses,
+                'batch_today': 0
+            }
+        except Exception as e:
+            logger.error(f"Get user stats error: {e}")
+            return {
+                'total_analyses': 0,
+                'daily_analyses': 0,
+                'wallets_tracked': 0,
+                'successful_analyses': 0,
+                'batch_today': 0
+            }
+        finally:
+            cursor.close()
+            self.return_connection(conn)
+
+    def get_today_registrations(self) -> int:
+        """Alias for get_new_users_today"""
+        return self.get_new_users_today()
+    
+    def get_admin_dashboard_stats(self) -> Dict:
+        """Get all stats for admin dashboard - MISSING METHOD"""
+        return {
+            'total_users': self.get_total_users(),
+            'active_7d': self.get_active_users_7d(),
+            'analyses_today': self.get_analyses_today(),
+            'new_users_today': self.get_new_users_today(),
+            'users_by_tier': self.get_users_by_tier(),
+            'active_subs': self.get_revenue_stats()['active_subscriptions'],
+            'revenue': self.get_revenue_stats()
+        }
+    
     
     # ========================================================================
     # LOGGING & ACTIONS
@@ -1316,52 +1363,6 @@ class PostgreSQLDatabase:
         finally:
             cursor.close()
             conn.close()
-    
-    def get_user_stats(self, user_id: int) -> Dict:
-        """Get user statistics - MISSING METHOD"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        try:
-            # Total analyses
-            cursor.execute("""
-                SELECT COUNT(*) FROM analysis_logs WHERE user_id = %s
-            """, (user_id,))
-            total_analyses = cursor.fetchone()[0]
-            
-            # Daily analyses
-            cursor.execute("""
-                SELECT daily_analyses FROM users WHERE user_id = %s
-            """, (user_id,))
-            daily_analyses = cursor.fetchone()[0]
-            
-            # Tracked wallets
-            cursor.execute("""
-                SELECT COUNT(*) FROM tracked_wallets
-                WHERE user_id = %s AND is_active = 1
-            """, (user_id,))
-            wallets_tracked = cursor.fetchone()[0]
-            
-            return {
-                'total_analyses': total_analyses,
-                'daily_analyses': daily_analyses,
-                'wallets_tracked': wallets_tracked,
-                'successful_analyses': total_analyses,
-                'batch_today': 0
-            }
-        except Error as e:
-            logger.error(f"Get user stats error: {e}")
-            return {
-                'total_analyses': 0,
-                'daily_analyses': 0,
-                'wallets_tracked': 0,
-                'successful_analyses': 0,
-                'batch_today': 0
-            }
-        finally:
-            cursor.close()
-            conn.close()
-    
     # ========================================================================
     # REMAINING METHODS FROM ORIGINAL (keeping all existing functionality)
     # ========================================================================
