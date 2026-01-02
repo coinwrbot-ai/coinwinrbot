@@ -1,21 +1,23 @@
 services:
-  # Web service (your bot)
-  - type: web
+  - type: background_worker  # Changed from "web"
     name: coinwinrbot
-    runtime: python
-    plan: free
+    env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.7
-      - key: DATABASE_TYPE
-        value: postgresql
-    autoDeploy: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: coinwinrbot-db
+          property: connectionString
+      - key: HELIUS_API_KEY
+        sync: false
+      - key: ALCHEMY_API_KEY
+        sync: false
+      # Add other env vars...
     
 databases:
-  # PostgreSQL database
   - name: coinwinrbot-db
-    plan: free
     databaseName: coinwinrbot
     user: coinwinrbot
