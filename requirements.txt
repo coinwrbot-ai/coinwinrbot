@@ -24,4 +24,3 @@ mysql-connector-python==8.2.0
 
 # Database - PostgreSQL for Render
 psycopg2-binary==2.9.9
-psycopg2
